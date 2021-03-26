@@ -43,7 +43,7 @@ void ButtonInit(void)
     // initialize interrupt controller to respond to timer interrupts
     IntPrioritySet(INT_TIMER0A, BUTTON_INT_PRIORITY);
     IntEnable(INT_TIMER0A);
-    /*
+
     // GPIO PJ0 and PJ1 = EK-TM4C1294XL buttons 1 and 2
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
     GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
@@ -69,7 +69,7 @@ void ButtonInit(void)
     ADCSequenceStepConfigure(ADC0_BASE, 0, 0, ADC_CTL_CH13);                             // Joystick HOR(X)
     ADCSequenceStepConfigure(ADC0_BASE, 0, 1, ADC_CTL_CH17 | ADC_CTL_IE | ADC_CTL_END);  // Joystick VER(Y)
     ADCSequenceEnable(ADC0_BASE, 0);
-    */
+
 }
 
 // update the debounced button state gButtons
@@ -143,7 +143,7 @@ uint32_t ButtonAutoRepeat(void)
 // ISR for scanning and debouncing buttons
 void ButtonISR(void) {
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
-    /*
+
     // read hardware button state
     uint32_t gpio_buttons =
             ~GPIOPinRead(GPIO_PORTJ_BASE, 0xff) & (GPIO_PIN_1 | GPIO_PIN_0); // EK-TM4C1294XL buttons in positions 0 and 1
@@ -153,14 +153,14 @@ void ButtonISR(void) {
     ButtonReadJoystick();               // Convert joystick state to button presses. The result is in gButtons.
     uint32_t presses = ~old_buttons & gButtons;   // detect button presses (transitions from not pressed to pressed)
     presses |= ButtonAutoRepeat();      // autorepeat presses if a button is held long enough
-    */
+
     static bool tic = false;
     static bool running = true;
-    /*
+
     if (presses & 1) { // EK-TM4C1294XL button 1 pressed
         running = !running;
     }
-    */
+
     if (running) {
         if (tic) gTime++; // increment time every other ISR call
         tic = !tic;
