@@ -160,6 +160,8 @@ void ButtonISR(void) {
     if (presses & 1) { // EK-TM4C1294XL button 1 pressed
         running = !running;
     }
+    if (presses & 2)
+        gTime = 0; // reset time
 
     if (running) {
         if (tic) gTime++; // increment time every other ISR call
