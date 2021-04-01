@@ -20,6 +20,8 @@
 uint32_t gSystemClock; // [Hz] system clock frequency
 volatile uint32_t gTime = 0; // time in hundredths of a second
 
+uint32_t dec2bin (volatile uint32_t button_dec); // function that converts decimal to binary
+
 int main(void)
 {
     IntMasterDisable();
@@ -42,8 +44,10 @@ int main(void)
     uint32_t mm;
     uint32_t ss;
     uint32_t ms;
+    uint32_t gButton_b;
 
     char str[50];   // string buffer
+    char str_bitmap[50];
     // full-screen rectangle
     tRectangle rectFullScreen = {0, 0, GrContextDpyWidthGet(&sContext)-1, GrContextDpyHeightGet(&sContext)-1};
 
@@ -57,9 +61,26 @@ int main(void)
         mm = gTime / 6000;
         ss = (gTime - 6000 * mm) / 100;
         ms = gTime - 6000 * mm - 100 * ss;
+        gButton_b = dec2bin (gButtons); // function that converts decimal to binary
         snprintf(str, sizeof(str), "Time = %02u:%02u:%02u", mm, ss, ms); // convert time to string
+        snprintf(str_bitmap, sizeof(str_bitmap), "Input: %09u", gButton_b);
         GrContextForegroundSet(&sContext, ClrYellow); // yellow text
         GrStringDraw(&sContext, str, /*length*/ -1, /*x*/ 0, /*y*/ 0, /*opaque*/ false);
+        GrStringDraw(&sContext, str_bitmap, /*length*/ -1, /*x*/ 0, /*y*/ 8, /*opaque*/ false);
         GrFlush(&sContext); // flush the frame buffer to the LCD
     }
+}
+
+uint32_t dec2bin (volatile uint32_t button_dec) {
+    uint32_t button_bin = 0;
+    uint32_t rem, temp = 1;
+
+    while (button_dec != 0)
+    {
+        rem = button_dec % 2; // get reminder
+        button_dec = button_dec / 2;
+        button_bin = button_bin + rem*temp; // add number to each bit by binary
+        temp = temp * 10;
+    }
+    return button_bin;
 }
