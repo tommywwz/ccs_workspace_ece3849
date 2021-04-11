@@ -29,7 +29,7 @@ uint32_t gSystemClock; // [Hz] system clock frequency
 volatile uint32_t gTime = 0; // time in hundredths of a second
 
 uint32_t dec2bin (volatile uint32_t button_dec); // function that converts decimal to binary
-void signal_init();
+void signal_init(void);
 
 int main(void)
 {
@@ -63,6 +63,8 @@ int main(void)
     // initialize PWM
     signal_init();
 
+    // initialize ADCs and Buttons
+    ADCInit();
     ButtonInit();
     IntMasterEnable();
 
@@ -97,7 +99,7 @@ uint32_t dec2bin (volatile uint32_t button_dec) {
     return button_bin;
 }
 
-void signal_init() {
+void signal_init(void) {
     // configure M0PWM2, at GPIO PF2, BoosterPack 1 header C1 pin 2
     // configure M0PWM3, at GPIO PF3, BoosterPack 1 header C1 pin 3
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
@@ -105,7 +107,7 @@ void signal_init() {
     GPIOPinConfigure(GPIO_PF2_M0PWM2);
     GPIOPinConfigure(GPIO_PF3_M0PWM3);
     GPIOPadConfigSet(GPIO_PORTF_BASE, GPIO_PIN_2 | GPIO_PIN_3,
-     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD);
+                     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD);
     // configure the PWM0 peripheral, gen 1, outputs 2 and 3
     SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
     PWMClockSet(PWM0_BASE, PWM_SYSCLK_DIV_1); // use system clock without division
