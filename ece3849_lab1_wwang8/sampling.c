@@ -39,11 +39,11 @@ void ADCInit(void) {
     ADCSequenceDisable(ADC0_BASE, 0); // choose ADC0 sequence 0; disable before configuring
     ADCSequenceDisable(ADC1_BASE, 0); // choose ADC1 sequence 0; disable before configuring
     ADCSequenceConfigure(ADC0_BASE, 0, ADC_TRIGGER_PROCESSOR, 0); // specify the "Always" trigger
-    ADCSequenceConfigure(ADC1_BASE, 0, ADC_TRIGGER_PROCESSOR, 0);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_CH3);                              // in the 0th step, sample channel 3 (AIN3)
-    ADCSequenceStepConfigure(ADC0_BASE, 0, 1, ADC_CTL_CH13);                             // Joystick HOR(X)
-    ADCSequenceStepConfigure(ADC0_BASE, 0, 2, ADC_CTL_CH17 | ADC_CTL_IE | ADC_CTL_END);  // Joystick VER(Y)
-     // enable interrupt, and make it the end of sequence
+    ADCSequenceConfigure(ADC1_BASE, 0, ADC_TRIGGER_ALWAYS, 0);
+    ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);   // in the 0th step, sample channel 3 (AIN3)
+    ADCSequenceStepConfigure(ADC0_BASE, 0, 0, ADC_CTL_CH13);                             // Joystick HOR(X)
+    ADCSequenceStepConfigure(ADC0_BASE, 0, 1, ADC_CTL_CH17 | ADC_CTL_IE | ADC_CTL_END);  // Joystick VER(Y)
+                                                                                         // enable interrupt, and make it the end of sequence
     ADCSequenceEnable(ADC0_BASE, 0); // enable the sequence. it is now sampling
     ADCSequenceEnable(ADC1_BASE, 0);
     ADCIntEnable(ADC1_BASE, 0); // enable sequence 0 interrupt in the ADC1 peripheral
