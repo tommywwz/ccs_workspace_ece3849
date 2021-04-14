@@ -62,13 +62,15 @@ int main(void)
 //    uint32_t ss;
 //    uint32_t ms;
 //    uint32_t gButton_b;
-    float fVoltsPerDiv = 0.6;
+    float fVoltsPerDiv = 1;
     float fScale;
     int x, y,nxt_x,nxt_y;
     int trigger;
     uint16_t locBuffer [LCD_HORIZONTAL_MAX];
+    uint16_t gridspace = 20;
 
-
+    char str_tscale[10];
+    char str_vscale[10];
 //    char str[50];   // string buffer
 //    char str_bitmap[50];
 
@@ -99,8 +101,23 @@ int main(void)
 
         x = 0;
 
+        GrContextForegroundSet(&sContext, ClrDarkBlue);
+
+        // draw grid
+        uint16_t gridoffset = 0;
+        while (gridspace*gridoffset <= LCD_VERTICAL_MAX/2) {
+            GrLineDrawH (&sContext, 0, LCD_HORIZONTAL_MAX-1, LCD_VERTICAL_MAX/2 - gridspace*gridoffset - 1);
+            GrLineDrawH (&sContext, 0, LCD_HORIZONTAL_MAX-1, LCD_VERTICAL_MAX/2 + gridspace*gridoffset);
+            GrLineDrawV (&sContext, LCD_HORIZONTAL_MAX/2 - gridspace*gridoffset - 1, 0, LCD_VERTICAL_MAX-1);
+            GrLineDrawV (&sContext, LCD_HORIZONTAL_MAX/2 + gridspace*gridoffset, 0, LCD_VERTICAL_MAX-1);
+            gridoffset++;
+        }
+
+
 //        snprintf(str, sizeof(str), "Time = %02u:%02u:%02u", mm, ss, ms); // convert time to string
 //        snprintf(str_bitmap, sizeof(str_bitmap), "Input: %09u", gButton_b);
+
+        // draw wave
         GrContextForegroundSet(&sContext, ClrYellow); // yellow text
         while (x < LCD_HORIZONTAL_MAX-1) {
             nxt_x = x + 1;
@@ -109,7 +126,21 @@ int main(void)
             GrLineDraw (&sContext, x, y, nxt_x, nxt_y);
             x++;
         }
-//        GrStringDraw(&sContext, str, /*length*/ -1, /*x*/ 0, /*y*/ 0, /*opaque*/ false);
+
+        //draw screen elements
+        GrContextForegroundSet(&sContext, ClrWhite); // white text
+        snprintf(str_tscale, sizeof(str_tscale), "%u us", 20);
+        snprintf(str_vscale, sizeof(str_vscale), "%u mV", 1000);
+        GrStringDraw(&sContext, str_tscale, /*length*/ -1, /*x*/ 10, /*y*/ 0, /*opaque*/ false);
+        GrStringDraw(&sContext, str_vscale, /*length*/ -1, /*x*/ LCD_HORIZONTAL_MAX/2 - sizeof(str_vscale), /*y*/ 0, /*opaque*/ false);
+        // draw trigger shape
+        GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-20, LCD_HORIZONTAL_MAX-15, 6);
+        GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-15, LCD_HORIZONTAL_MAX-10, 0);
+        GrLineDrawV(&sContext, LCD_HORIZONTAL_MAX-15, 6, 0);
+        // draw trigger arrow
+        GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-17, 3, LCD_HORIZONTAL_MAX-15, 1);
+        GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-13, 3, LCD_HORIZONTAL_MAX-15, 1);
+
 //        GrStringDraw(&sContext, str_bitmap, /*length*/ -1, /*x*/ 0, /*y*/ 8, /*opaque*/ false);
         GrFlush(&sContext); // flush the frame buffer to the LCD
     }
