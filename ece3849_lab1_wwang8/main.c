@@ -38,6 +38,7 @@ void loadBuffer(uint16_t* locBuffer, int trigger);
 int RisingTrigger(void);
 void signal_init(void);                          // initial the PWM to generate wave
 
+
 int main(void)
 {
     IntMasterDisable();
@@ -93,7 +94,10 @@ int main(void)
 //        mm = locTime / 6000;
 //        ss = (locTime - 6000 * mm) / 100;
 //        ms = locTime - 6000 * mm - 100 * ss;
-//        gButton_b = dec2bin (gButtons); // function that converts decimal to binary
+//        gButton_b = dec2bin (gButtons); // function that converts decimal to binary\
+//        snprintf(str, sizeof(str), "Time = %02u:%02u:%02u", mm, ss, ms); // convert time to string
+//        snprintf(str_bitmap, sizeof(str_bitmap), "Input: %09u", gButton_b);
+//        GrStringDraw(&sContext, str_bitmap, /*length*/ -1, /*x*/ 0, /*y*/ 8, /*opaque*/ false);
 
         fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv);
         trigger = RisingTrigger();
@@ -114,8 +118,6 @@ int main(void)
         }
 
 
-//        snprintf(str, sizeof(str), "Time = %02u:%02u:%02u", mm, ss, ms); // convert time to string
-//        snprintf(str_bitmap, sizeof(str_bitmap), "Input: %09u", gButton_b);
 
         // draw wave
         GrContextForegroundSet(&sContext, ClrYellow); // yellow text
@@ -141,7 +143,6 @@ int main(void)
         GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-17, 3, LCD_HORIZONTAL_MAX-15, 1);
         GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-13, 3, LCD_HORIZONTAL_MAX-15, 1);
 
-//        GrStringDraw(&sContext, str_bitmap, /*length*/ -1, /*x*/ 0, /*y*/ 8, /*opaque*/ false);
         GrFlush(&sContext); // flush the frame buffer to the LCD
     }
 }

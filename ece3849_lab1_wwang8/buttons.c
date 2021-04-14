@@ -29,6 +29,11 @@ uint32_t gADCSamplingRate;      // [Hz] actual ADC sampling rate
 extern uint32_t gSystemClock;   // [Hz] system clock frequency
 extern volatile uint32_t gTime; // time in hundredths of a second
 
+volatile DataType fifo[FIFO_SIZE];  // FIFO storage array
+volatile int fifo_head = 0; // index of the first item in the FIFO
+volatile int fifo_tail = 0; // index one step past the last item
+
+
 // initialize all button and joystick handling hardware
 void ButtonInit(void)
 {
@@ -141,6 +146,37 @@ uint32_t ButtonAutoRepeat(void)
     return presses;
 }
 
+int fifo_put(DataType data)
+{
+    int new_tail = fifo_tail + 1;
+    if (new_tail >= FIFO_SIZE) new_tail = 0; // wrap around
+    if (fifo_head != new_tail) {    // if the FIFO is not full
+        fifo[fifo_tail] = data;     // store data into the FIFO
+        fifo_tail = new_tail;       // advance FIFO tail index
+        return 1;                   // success
+    }
+    return 0;   // full
+}
+
+// get data from the FIFO
+// returns 1 on success, 0 if FIFO was empty
+int fifo_get(DataType *data)
+{
+    if (fifo_head != fifo_tail) {   // if the FIFO is not empty
+        *data = fifo[fifo_head];    // read data from the FIFO
+
+        if (fifo_head >= FIFO_SIZE-1) {
+            fifo_head = 0; // warp around
+        }
+        else {
+            fifo_head++; // advance FIFO head index
+        }
+
+        return 1;                   // success
+    }
+    return 0;   // empty
+}
+
 // ISR for scanning and debouncing buttons
 void ButtonISR(void) {
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
@@ -159,6 +195,8 @@ void ButtonISR(void) {
 
     static bool tic = false;
     static bool running = true;
+
+    fifo_put((DataType)gButtons);
 
     if (presses & 1) { // EK-TM4C1294XL button 1 pressed
         running = !running;
