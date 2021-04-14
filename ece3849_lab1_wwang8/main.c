@@ -24,12 +24,19 @@
 #include "driverlib/pin_map.h"
 
 #define PWM_FREQUENCY 20000  // PWM frequency = 20 kHz
+#define ADC_OFFSET 2048         // ADC value when oscope reading = 0V
+#define VIN_RANGE 3.3f       // range of ADC
+#define PIXELS_PER_DIV 20    // LCD pixels per voltage division
+#define ADC_BITS 12          // number of bits in the ADC sample
+
 
 uint32_t gSystemClock; // [Hz] system clock frequency
 volatile uint32_t gTime = 0; // time in hundredths of a second
 
 uint32_t dec2bin (volatile uint32_t button_dec); // function that converts decimal to binary
-void signal_init(void);
+void loadBuffer(uint16_t* locBuffer, int trigger);
+int RisingTrigger(void);
+void signal_init(void);                          // initial the PWM to generate wave
 
 int main(void)
 {
@@ -50,13 +57,21 @@ int main(void)
     GrContextFontSet(&sContext, &g_sFontFixed6x8); // select font
 
     //uint32_t time;  // local copy of gTime
-    uint32_t mm;
-    uint32_t ss;
-    uint32_t ms;
-    uint32_t gButton_b;
+//    uint32_t locTime;
+//    uint32_t mm;
+//    uint32_t ss;
+//    uint32_t ms;
+//    uint32_t gButton_b;
+    float fVoltsPerDiv = 0.6;
+    float fScale;
+    int x, y,nxt_x,nxt_y;
+    int trigger;
+    uint16_t locBuffer [LCD_HORIZONTAL_MAX];
 
-    char str[50];   // string buffer
-    char str_bitmap[50];
+
+//    char str[50];   // string buffer
+//    char str_bitmap[50];
+
     // full-screen rectangle
     tRectangle rectFullScreen = {0, 0, GrContextDpyWidthGet(&sContext)-1, GrContextDpyHeightGet(&sContext)-1};
 
@@ -71,16 +86,31 @@ int main(void)
     while (true) {
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &rectFullScreen); // fill screen with black
-        //time = gTime; // read shared global only once
-        mm = gTime / 6000;
-        ss = (gTime - 6000 * mm) / 100;
-        ms = gTime - 6000 * mm - 100 * ss;
-        gButton_b = dec2bin (gButtons); // function that converts decimal to binary
-        snprintf(str, sizeof(str), "Time = %02u:%02u:%02u", mm, ss, ms); // convert time to string
-        snprintf(str_bitmap, sizeof(str_bitmap), "Input: %09u", gButton_b);
+//        time = gTime; // read shared global only once
+//        locTime = gTime;
+//        mm = locTime / 6000;
+//        ss = (locTime - 6000 * mm) / 100;
+//        ms = locTime - 6000 * mm - 100 * ss;
+//        gButton_b = dec2bin (gButtons); // function that converts decimal to binary
+
+        fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv);
+        trigger = RisingTrigger();
+        loadBuffer(locBuffer, trigger);
+
+        x = 0;
+
+//        snprintf(str, sizeof(str), "Time = %02u:%02u:%02u", mm, ss, ms); // convert time to string
+//        snprintf(str_bitmap, sizeof(str_bitmap), "Input: %09u", gButton_b);
         GrContextForegroundSet(&sContext, ClrYellow); // yellow text
-        GrStringDraw(&sContext, str, /*length*/ -1, /*x*/ 0, /*y*/ 0, /*opaque*/ false);
-        GrStringDraw(&sContext, str_bitmap, /*length*/ -1, /*x*/ 0, /*y*/ 8, /*opaque*/ false);
+        while (x < LCD_HORIZONTAL_MAX-1) {
+            nxt_x = x + 1;
+            y = LCD_VERTICAL_MAX/2 - (int)roundf(fScale * ((int)(*(locBuffer + x)/*sample*/) - ADC_OFFSET));
+            nxt_y = LCD_VERTICAL_MAX/2 - (int)roundf(fScale * ((int)(*(locBuffer + nxt_x)/*sample*/) - ADC_OFFSET));
+            GrLineDraw (&sContext, x, y, nxt_x, nxt_y);
+            x++;
+        }
+//        GrStringDraw(&sContext, str, /*length*/ -1, /*x*/ 0, /*y*/ 0, /*opaque*/ false);
+//        GrStringDraw(&sContext, str_bitmap, /*length*/ -1, /*x*/ 0, /*y*/ 8, /*opaque*/ false);
         GrFlush(&sContext); // flush the frame buffer to the LCD
     }
 }
@@ -97,6 +127,35 @@ uint32_t dec2bin (volatile uint32_t button_dec) {
         temp = temp * 10;
     }
     return button_bin;
+}
+
+
+void loadBuffer(uint16_t* locBuffer, int trigger) {
+    // Step 4
+    int i = 0; // local buffer index
+    int x = trigger - LCD_HORIZONTAL_MAX/2; //set beginning of index to the half screen behind the trigger
+    while (i < LCD_HORIZONTAL_MAX){
+        *(locBuffer + i) = gADCBuffer[ADC_BUFFER_WRAP(x + i)];
+        i++;
+    }
+}
+
+int RisingTrigger(void) // search for rising edge trigger
+{
+    // Step 1
+    int32_t locBufferIndex = gADCBufferIndex;
+    int x = locBufferIndex - LCD_HORIZONTAL_MAX/2/* half screen width; don’t use a magic number */;
+    // Step 2
+    int x_stop = x - ADC_BUFFER_SIZE/2;
+    for (; x > x_stop; x--) {
+        if (gADCBuffer[ADC_BUFFER_WRAP(x)] >= ADC_OFFSET &&
+                gADCBuffer[ADC_BUFFER_WRAP(x-1)]/* next older sample */ < ADC_OFFSET)
+            break;
+    }
+    // Step 3
+    if (x == x_stop) // for loop ran to the end
+        x = gADCBufferIndex - LCD_HORIZONTAL_MAX/2; // reset x back to how it was initialized
+    return x;
 }
 
 void signal_init(void) {
