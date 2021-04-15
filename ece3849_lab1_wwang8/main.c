@@ -132,7 +132,7 @@ int main(void)
 
         if (pressed) {
             VoltDivIndex++;
-            if (VoltDivIndex == 5) VoltDivIndex = 0;
+            if (VoltDivIndex >= 5) VoltDivIndex = 0;
         }
 
         // load reading in this frame
