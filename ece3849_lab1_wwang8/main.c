@@ -162,19 +162,19 @@ int main(void)
         GrStringDraw(&sContext, gVoltageScaleStr[VoltDivIndex], /*length*/ -1, /*x*/ LCD_HORIZONTAL_MAX/2 - sizeof(gVoltageScaleStr[VoltDivIndex]), /*y*/ 0, /*opaque*/ false);
 
         if (trigger_mod) {
-            // draw trigger shape
+            // draw rising trigger shape
             GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-20, LCD_HORIZONTAL_MAX-15, 6);
             GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-15, LCD_HORIZONTAL_MAX-10, 0);
             GrLineDrawV(&sContext, LCD_HORIZONTAL_MAX-15, 6, 0);
-            // draw trigger arrow
+            // draw rising trigger arrow
             GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-17, 3, LCD_HORIZONTAL_MAX-15, 1);
             GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-13, 3, LCD_HORIZONTAL_MAX-15, 1);
         } else {
-            // draw trigger shape
+            // draw falling trigger shape
             GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-15, LCD_HORIZONTAL_MAX-10, 6);
             GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-20, LCD_HORIZONTAL_MAX-15, 0);
             GrLineDrawV(&sContext, LCD_HORIZONTAL_MAX-15, 6, 0);
-            // draw trigger arrow
+            // draw falling trigger arrow
             GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-17, 2, LCD_HORIZONTAL_MAX-15, 4);
             GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-13, 2, LCD_HORIZONTAL_MAX-15, 4);
         }
