@@ -30,7 +30,7 @@
 #define VIN_RANGE 3.3f       // range of ADC
 #define PIXELS_PER_DIV 20    // LCD pixels per voltage division
 #define ADC_BITS 12          // number of bits in the ADC sample
-#define CPU_LOAD_CHECK_FREQ 100000 // in Hz, check load for 10 ms
+#define CPU_LOAD_CHECK_FREQ 100000 // Hz
 
 
 uint32_t gSystemClock; // [Hz] system clock frequency
@@ -40,7 +40,7 @@ const char* const gVoltageScaleStr[] = {
 };
 
 uint32_t dec2bin (uint32_t button_dec); // function that converts decimal to binary
-void loadBuffer(uint16_t* locBuffer, int trigger);  // load a frame of global buffer at trigger point to local buffer
+void loadBuffer(uint16_t* locBuffer, int trigger);
 int RisingTrigger(void);
 int FallingTrigger(void);
 void signal_init(void);                          // initial the PWM to generate wave
@@ -67,15 +67,15 @@ int main(void)
     GrContextFontSet(&sContext, &g_sFontFixed6x8); // select font
 
 //    char str_bitmap[50]; //debug buttons
-    DataType Button = 0; // button read from fifo
-    DataType Button_old; // last button read from fifo
-    const float fVoltsPerDiv[] = {0.1, 0.2, 0.5, 1.0f, 2.0f}; //different voltage scales for calculation
-    float fScale;  // scale factor to control the scale of voltage display
-    int x, y,nxt_x,nxt_y; // current x,y coordinate and next x,y coordinate
-    int trigger;  // the trigger location in buffer
+    DataType Button = 0;
+    DataType Button_old; // button and button old
+    const float fVoltsPerDiv[] = {0.1, 0.2, 0.5, 1.0f, 2.0f};
+    float fScale;
+    int x, y,nxt_x,nxt_y;
+    int trigger;
     bool trigger_mod = 1;  // if non-zero rising trigger, if 0 falling trigger
     uint16_t locBuffer [LCD_HORIZONTAL_MAX];
-    uint16_t gridspace = 20; // the space between each grid in pixels
+    uint16_t gridspace = 20;
     int32_t unload_count; // the iteration count when interrupt disabled
     int32_t load_count; // the iteration count when interrupt enabled
     float cpu_load;
@@ -139,7 +139,7 @@ int main(void)
         // load reading in this frame
         fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv[VoltDivIndex]);
         trigger_mod ? (trigger = RisingTrigger()) : (trigger = FallingTrigger()); // choose different trigger mode
-        loadBuffer(locBuffer, trigger); // load local buffer with a frame from global buffer
+        loadBuffer(locBuffer, trigger);
 
         // draw wave
         x = 0;
