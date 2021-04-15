@@ -35,10 +35,11 @@
 
 uint32_t gSystemClock; // [Hz] system clock frequency
 volatile uint32_t gTime = 0; // time in hundredths of a second
-uint32_t gCPU_unload; // the iteration count when interrupt disabled
-uint32_t gCPU_Load; // the iteration count when interrupt enabled
+const char* const gVoltageScaleStr[] = {
+    "100mV", "200mV", "500mV", "1V", "2V"
+};
 
-uint32_t dec2bin (volatile uint32_t button_dec); // function that converts decimal to binary
+uint32_t dec2bin (uint32_t button_dec); // function that converts decimal to binary
 void loadBuffer(uint16_t* locBuffer, int trigger);
 int RisingTrigger(void);
 void signal_init(void);                          // initial the PWM to generate wave
@@ -64,28 +65,23 @@ int main(void)
     GrContextInit(&sContext, &g_sCrystalfontz128x128); // Initialize the grlib graphics context
     GrContextFontSet(&sContext, &g_sFontFixed6x8); // select font
 
-    //uint32_t time;  // local copy of gTime
-//    uint32_t locTime;
-//    uint32_t mm;
-//    uint32_t ss;
-//    uint32_t ms;
-    char Button, Button_b;
-    char str_bitmap[50];
-    float fVoltsPerDiv = 1;
+//    char str_bitmap[50]; //debug buttons
+    DataType Button = 0;
+    DataType Button_old; // button and button old
+    const float fVoltsPerDiv[] = {0.1, 0.2, 0.5, 1.0f, 2.0f};
     float fScale;
     int x, y,nxt_x,nxt_y;
     int trigger;
     uint16_t locBuffer [LCD_HORIZONTAL_MAX];
     uint16_t gridspace = 20;
-    int32_t unload_count;
-    int32_t load_count;
+    int32_t unload_count; // the iteration count when interrupt disabled
+    int32_t load_count; // the iteration count when interrupt enabled
     float cpu_load;
+    uint16_t VoltDivIndex = 0; // an index for choosing the corresponding voltage division
+    uint8_t pressed;
 
-    char str_tscale[10];
-    char str_vscale[10];
+    char str_tscale[10]; // time scale for display
     char str_cpu_load[30];
-//    char str[50];   // string buffer
-
 
     // full-screen rectangle
     tRectangle rectFullScreen = {0, 0, GrContextDpyWidthGet(&sContext)-1, GrContextDpyHeightGet(&sContext)-1};
@@ -109,17 +105,12 @@ int main(void)
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &rectFullScreen); // fill screen with black
 
-        // debug button fifo
+//        //debug button fifo
 //        GrContextForegroundSet(&sContext, ClrWhite); // white text
 //        fifo_get(&Button);
-//        Button_b = dec2bin (Button); // function that converts decimal to binary
+//        Button_b = dec2bin ((uint32_t)Button); // function that converts decimal to binary
 //        snprintf(str_bitmap, sizeof(str_bitmap), "Input: %09u", Button_b);
 //        GrStringDraw(&sContext, str_bitmap, /*length*/ -1, /*x*/ 0, /*y*/ 8, /*opaque*/ false);
-
-
-        fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv);
-        trigger = RisingTrigger();
-        loadBuffer(locBuffer, trigger);
 
         // draw grid
         GrContextForegroundSet(&sContext, ClrDarkBlue);
@@ -131,6 +122,23 @@ int main(void)
             GrLineDrawV (&sContext, LCD_HORIZONTAL_MAX/2 + gridspace*gridoffset, 0, LCD_VERTICAL_MAX-1);
             gridoffset++;
         }
+
+        Button_old = Button;
+        fifo_get(&Button);
+        if (Button_old)
+            pressed = !(Button & 0x1); // detect if the USR_SW1 is released
+        else
+            pressed = 0;
+
+        if (pressed) {
+            VoltDivIndex++;
+            if (VoltDivIndex == 5) VoltDivIndex = 0;
+        }
+
+        // load reading in this frame
+        fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv[VoltDivIndex]);
+        trigger = RisingTrigger();
+        loadBuffer(locBuffer, trigger);
 
         // draw wave
         x = 0;
@@ -146,9 +154,8 @@ int main(void)
         //draw screen elements
         GrContextForegroundSet(&sContext, ClrWhite); // white text
         snprintf(str_tscale, sizeof(str_tscale), "%u us", 20);
-        snprintf(str_vscale, sizeof(str_vscale), "%u mV", 1000);
         GrStringDraw(&sContext, str_tscale, /*length*/ -1, /*x*/ 10, /*y*/ 0, /*opaque*/ false);
-        GrStringDraw(&sContext, str_vscale, /*length*/ -1, /*x*/ LCD_HORIZONTAL_MAX/2 - sizeof(str_vscale), /*y*/ 0, /*opaque*/ false);
+        GrStringDraw(&sContext, gVoltageScaleStr[VoltDivIndex], /*length*/ -1, /*x*/ LCD_HORIZONTAL_MAX/2 - sizeof(gVoltageScaleStr[VoltDivIndex]), /*y*/ 0, /*opaque*/ false);
         // draw trigger shape
         GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-20, LCD_HORIZONTAL_MAX-15, 6);
         GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-15, LCD_HORIZONTAL_MAX-10, 0);
@@ -166,7 +173,7 @@ int main(void)
     }
 }
 
-uint32_t dec2bin (volatile uint32_t button_dec) {
+uint32_t dec2bin (uint32_t button_dec) {
     uint32_t button_bin = 0;
     uint32_t rem, temp = 1;
 
