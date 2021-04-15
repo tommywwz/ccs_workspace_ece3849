@@ -12,8 +12,10 @@
 #include <stdbool.h>
 #include "driverlib/fpu.h"
 #include "driverlib/sysctl.h"
+#include "driverlib/timer.h"
 #include "driverlib/interrupt.h"
 #include "Crystalfontz128x128_ST7735.h"
+#include "inc/tm4c1294ncpdt.h"
 #include <stdio.h>
 #include "buttons.h"
 #include "sampling.h"
@@ -28,15 +30,20 @@
 #define VIN_RANGE 3.3f       // range of ADC
 #define PIXELS_PER_DIV 20    // LCD pixels per voltage division
 #define ADC_BITS 12          // number of bits in the ADC sample
+#define CPU_LOAD_CHECK_FREQ 100000 // Hz
 
 
 uint32_t gSystemClock; // [Hz] system clock frequency
 volatile uint32_t gTime = 0; // time in hundredths of a second
+uint32_t gCPU_unload; // the iteration count when interrupt disabled
+uint32_t gCPU_Load; // the iteration count when interrupt enabled
 
 uint32_t dec2bin (volatile uint32_t button_dec); // function that converts decimal to binary
 void loadBuffer(uint16_t* locBuffer, int trigger);
 int RisingTrigger(void);
 void signal_init(void);                          // initial the PWM to generate wave
+int32_t cpu_unload_count(void);
+int32_t cpu_load_count(void);
 
 
 int main(void)
@@ -62,18 +69,23 @@ int main(void)
 //    uint32_t mm;
 //    uint32_t ss;
 //    uint32_t ms;
-//    uint32_t gButton_b;
+    char Button, Button_b;
+    char str_bitmap[50];
     float fVoltsPerDiv = 1;
     float fScale;
     int x, y,nxt_x,nxt_y;
     int trigger;
     uint16_t locBuffer [LCD_HORIZONTAL_MAX];
     uint16_t gridspace = 20;
+    int32_t unload_count;
+    int32_t load_count;
+    float cpu_load;
 
     char str_tscale[10];
     char str_vscale[10];
+    char str_cpu_load[30];
 //    char str[50];   // string buffer
-//    char str_bitmap[50];
+
 
     // full-screen rectangle
     tRectangle rectFullScreen = {0, 0, GrContextDpyWidthGet(&sContext)-1, GrContextDpyHeightGet(&sContext)-1};
@@ -84,30 +96,33 @@ int main(void)
     // initialize ADCs and Buttons
     ADCInit();
     ButtonInit();
+    // initial Timer3 for CPU load counting
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER3);
+    TimerDisable(TIMER3_BASE, TIMER_BOTH);
+    TimerConfigure(TIMER3_BASE, TIMER_CFG_ONE_SHOT);
+    TimerLoadSet(TIMER3_BASE, TIMER_A, CPU_LOAD_CHECK_FREQ - 1);
+    unload_count = cpu_unload_count();
+
     IntMasterEnable();
 
     while (true) {
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &rectFullScreen); // fill screen with black
-//        time = gTime; // read shared global only once
-//        locTime = gTime;
-//        mm = locTime / 6000;
-//        ss = (locTime - 6000 * mm) / 100;
-//        ms = locTime - 6000 * mm - 100 * ss;
-//        gButton_b = dec2bin (gButtons); // function that converts decimal to binary\
-//        snprintf(str, sizeof(str), "Time = %02u:%02u:%02u", mm, ss, ms); // convert time to string
-//        snprintf(str_bitmap, sizeof(str_bitmap), "Input: %09u", gButton_b);
+
+        // debug button fifo
+//        GrContextForegroundSet(&sContext, ClrWhite); // white text
+//        fifo_get(&Button);
+//        Button_b = dec2bin (Button); // function that converts decimal to binary
+//        snprintf(str_bitmap, sizeof(str_bitmap), "Input: %09u", Button_b);
 //        GrStringDraw(&sContext, str_bitmap, /*length*/ -1, /*x*/ 0, /*y*/ 8, /*opaque*/ false);
+
 
         fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv);
         trigger = RisingTrigger();
         loadBuffer(locBuffer, trigger);
 
-        x = 0;
-
-        GrContextForegroundSet(&sContext, ClrDarkBlue);
-
         // draw grid
+        GrContextForegroundSet(&sContext, ClrDarkBlue);
         uint16_t gridoffset = 0;
         while (gridspace*gridoffset <= LCD_VERTICAL_MAX/2) {
             GrLineDrawH (&sContext, 0, LCD_HORIZONTAL_MAX-1, LCD_VERTICAL_MAX/2 - gridspace*gridoffset - 1);
@@ -117,9 +132,8 @@ int main(void)
             gridoffset++;
         }
 
-
-
         // draw wave
+        x = 0;
         GrContextForegroundSet(&sContext, ClrYellow); // yellow text
         while (x < LCD_HORIZONTAL_MAX-1) {
             nxt_x = x + 1;
@@ -143,6 +157,11 @@ int main(void)
         GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-17, 3, LCD_HORIZONTAL_MAX-15, 1);
         GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-13, 3, LCD_HORIZONTAL_MAX-15, 1);
 
+        // draw CPU load
+        load_count = cpu_load_count();
+        cpu_load = 1.0f - (float)load_count/unload_count;
+        snprintf(str_cpu_load, sizeof(str_cpu_load), "CPU load = %.1f%%", cpu_load*100);
+        GrStringDraw(&sContext, str_cpu_load, /*length*/ -1, /*x*/ 0, /*y*/ LCD_VERTICAL_MAX - 8, /*opaque*/ false);
         GrFlush(&sContext); // flush the frame buffer to the LCD
     }
 }
@@ -208,4 +227,22 @@ void signal_init(void) {
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, roundf((float)gSystemClock/PWM_FREQUENCY*0.4f));
     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT | PWM_OUT_3_BIT, true);
     PWMGenEnable(PWM0_BASE, PWM_GEN_1);
+}
+
+int32_t cpu_unload_count(void) {
+    int32_t CPU_unload = 0;
+    TimerEnable(TIMER3_BASE, TIMER_A);
+    while (TIMER3_CTL_R & TIMER_CTL_TAEN) {
+        CPU_unload++; // iterate if time is not up
+    }
+    return CPU_unload;
+}
+
+int32_t cpu_load_count(void) {
+    int32_t CPU_load = 0;
+    TimerEnable(TIMER3_BASE, TIMER_A);
+    while (TIMER3_CTL_R & TIMER_CTL_TAEN) {
+        CPU_load++; // iterate if time is not up
+    }
+    return CPU_load;
 }
