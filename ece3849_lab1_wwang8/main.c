@@ -42,6 +42,7 @@ const char* const gVoltageScaleStr[] = {
 uint32_t dec2bin (uint32_t button_dec); // function that converts decimal to binary
 void loadBuffer(uint16_t* locBuffer, int trigger);
 int RisingTrigger(void);
+int FallingTrigger(void);
 void signal_init(void);                          // initial the PWM to generate wave
 int32_t cpu_unload_count(void);
 int32_t cpu_load_count(void);
@@ -72,13 +73,15 @@ int main(void)
     float fScale;
     int x, y,nxt_x,nxt_y;
     int trigger;
+    bool trigger_mod = 1;  // if non-zero rising trigger, if 0 falling trigger
     uint16_t locBuffer [LCD_HORIZONTAL_MAX];
     uint16_t gridspace = 20;
     int32_t unload_count; // the iteration count when interrupt disabled
     int32_t load_count; // the iteration count when interrupt enabled
     float cpu_load;
     uint16_t VoltDivIndex = 0; // an index for choosing the corresponding voltage division
-    uint8_t pressed;
+    uint8_t pressed;    // 1 if USR_SW1 pressed, 2 if USR_SW2 pressed
+
 
     char str_tscale[10]; // time scale for display
     char str_cpu_load[30];
@@ -125,19 +128,20 @@ int main(void)
 
         Button_old = Button;
         fifo_get(&Button);
-        if (Button_old)
-            pressed = !(Button & 0x1); // detect if the USR_SW1 is released
-        else
-            pressed = 0;
+        pressed = ~Button & Button_old; // detect the button from pressed to non pressed
 
-        if (pressed) {
+        if (pressed & 2) {
             VoltDivIndex++;
             if (VoltDivIndex >= 5) VoltDivIndex = 0;
         }
 
+        if (pressed & 1)
+            trigger_mod = !trigger_mod; // if sw 1 pressed, flip the trigger mode
+
+
         // load reading in this frame
         fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv[VoltDivIndex]);
-        trigger = RisingTrigger();
+        trigger_mod ? (trigger = RisingTrigger()) : (trigger = FallingTrigger()); // choose different trigger mode
         loadBuffer(locBuffer, trigger);
 
         // draw wave
@@ -156,13 +160,24 @@ int main(void)
         snprintf(str_tscale, sizeof(str_tscale), "%u us", 20);
         GrStringDraw(&sContext, str_tscale, /*length*/ -1, /*x*/ 10, /*y*/ 0, /*opaque*/ false);
         GrStringDraw(&sContext, gVoltageScaleStr[VoltDivIndex], /*length*/ -1, /*x*/ LCD_HORIZONTAL_MAX/2 - sizeof(gVoltageScaleStr[VoltDivIndex]), /*y*/ 0, /*opaque*/ false);
-        // draw trigger shape
-        GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-20, LCD_HORIZONTAL_MAX-15, 6);
-        GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-15, LCD_HORIZONTAL_MAX-10, 0);
-        GrLineDrawV(&sContext, LCD_HORIZONTAL_MAX-15, 6, 0);
-        // draw trigger arrow
-        GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-17, 3, LCD_HORIZONTAL_MAX-15, 1);
-        GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-13, 3, LCD_HORIZONTAL_MAX-15, 1);
+
+        if (trigger_mod) {
+            // draw trigger shape
+            GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-20, LCD_HORIZONTAL_MAX-15, 6);
+            GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-15, LCD_HORIZONTAL_MAX-10, 0);
+            GrLineDrawV(&sContext, LCD_HORIZONTAL_MAX-15, 6, 0);
+            // draw trigger arrow
+            GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-17, 3, LCD_HORIZONTAL_MAX-15, 1);
+            GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-13, 3, LCD_HORIZONTAL_MAX-15, 1);
+        } else {
+            // draw trigger shape
+            GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-15, LCD_HORIZONTAL_MAX-10, 6);
+            GrLineDrawH(&sContext, LCD_HORIZONTAL_MAX-20, LCD_HORIZONTAL_MAX-15, 0);
+            GrLineDrawV(&sContext, LCD_HORIZONTAL_MAX-15, 6, 0);
+            // draw trigger arrow
+            GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-17, 2, LCD_HORIZONTAL_MAX-15, 4);
+            GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-13, 2, LCD_HORIZONTAL_MAX-15, 4);
+        }
 
         // draw CPU load
         load_count = cpu_load_count();
@@ -208,6 +223,24 @@ int RisingTrigger(void) // search for rising edge trigger
     for (; x > x_stop; x--) {
         if (gADCBuffer[ADC_BUFFER_WRAP(x)] >= ADC_OFFSET &&
                 gADCBuffer[ADC_BUFFER_WRAP(x-1)]/* next older sample */ < ADC_OFFSET)
+            break;
+    }
+    // Step 3
+    if (x == x_stop) // for loop ran to the end
+        x = gADCBufferIndex - LCD_HORIZONTAL_MAX/2; // reset x back to how it was initialized
+    return x;
+}
+
+int FallingTrigger(void) // search for falling edge trigger
+{
+    // Step 1
+    int32_t locBufferIndex = gADCBufferIndex;
+    int x = locBufferIndex - LCD_HORIZONTAL_MAX/2/* half screen width; don’t use a magic number */;
+    // Step 2
+    int x_stop = x - ADC_BUFFER_SIZE/2;
+    for (; x > x_stop; x--) {
+        if (gADCBuffer[ADC_BUFFER_WRAP(x)] <= ADC_OFFSET &&
+                gADCBuffer[ADC_BUFFER_WRAP(x-1)]/* next older sample */ > ADC_OFFSET)
             break;
     }
     // Step 3
