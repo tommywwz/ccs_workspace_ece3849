@@ -129,12 +129,15 @@ int main(void)
         Button_old = Button;
         fifo_get(&Button);
         pressed = ~Button & Button_old; // detect the button from pressed to non pressed
+
         if (pressed & 2) {
-            VoltDivIndex++; // if usr_sw2 pressed, loop the voltage division index
+            VoltDivIndex++;
             if (VoltDivIndex >= 5) VoltDivIndex = 0;
         }
+
         if (pressed & 1)
             trigger_mod = !trigger_mod; // if sw 1 pressed, flip the trigger mode
+
 
         // load reading in this frame
         fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv[VoltDivIndex]);
