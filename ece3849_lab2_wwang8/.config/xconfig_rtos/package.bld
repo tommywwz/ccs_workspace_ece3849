@@ -11,7 +11,7 @@ var makeAssembly = false;
 var Executable = xdc.module('xdc.bld.Executable');
 
 var exeOpts = new Executable.Attrs({
-        cfgScript: 'C:/Users/gene/OneDrive - Worcester Polytechnic Institute (wpi.edu)/ECE3849/workspace_v9/ece3849_lab2_starter/rtos.cfg',
+        cfgScript: 'C:/ccs_workspace/ece3849_lab2_wwang8/rtos.cfg',
         profile: 'release',
         cfgHome: 'xconfig_rtos',
 });
@@ -40,8 +40,8 @@ else {
 }
 
 var thisObj = {
-    cfg:        'C:/Users/gene/OneDrive - Worcester Polytechnic Institute (wpi.edu)/ECE3849/workspace_v9/ece3849_lab2_starter/rtos.cfg',
-    outputPath: 'C:/Users/gene/OneDrive - Worcester Polytechnic Institute (wpi.edu)/ECE3849/workspace_v9/ece3849_lab2_starter/.config/xconfig_rtos',
+    cfg:        'C:/ccs_workspace/ece3849_lab2_wwang8/rtos.cfg',
+    outputPath: 'C:/ccs_workspace/ece3849_lab2_wwang8/.config/xconfig_rtos',
     exeName:    'rtos' + suffix,
     exeIntName: 'rtos' + suffix.replace('.', '_'),
     targ:       targ,
