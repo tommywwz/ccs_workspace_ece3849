@@ -16,7 +16,6 @@
 #include "driverlib/timer.h"
 #include "driverlib/interrupt.h"
 #include "driverlib/adc.h"
-#include "sysctl_pll.h"
 #include "buttons.h"
 
 // public globals
@@ -37,18 +36,18 @@ volatile int fifo_tail = 0; // index one step past the last item
 // initialize all button and joystick handling hardware
 void ButtonInit(void)
 {
-    // initialize a general purpose timer for periodic interrupts
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
-    TimerDisable(TIMER0_BASE, TIMER_BOTH);
-    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
-    TimerLoadSet(TIMER0_BASE, TIMER_A, roundf((float)gSystemClock / BUTTON_SCAN_RATE) - 1);
-    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-    TimerEnable(TIMER0_BASE, TIMER_BOTH);
-
-    // initialize interrupt controller to respond to timer interrupts
-    IntPrioritySet(INT_TIMER0A, BUTTON_INT_PRIORITY);
-    IntEnable(INT_TIMER0A);
-
+//    // initialize a general purpose timer for periodic interrupts
+//    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+//    TimerDisable(TIMER0_BASE, TIMER_BOTH);
+//    TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+//    TimerLoadSet(TIMER0_BASE, TIMER_A, roundf((float)gSystemClock / BUTTON_SCAN_RATE) - 1);
+//    TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+//    TimerEnable(TIMER0_BASE, TIMER_BOTH);
+//
+//    // initialize interrupt controller to respond to timer interrupts
+//    IntPrioritySet(INT_TIMER0A, BUTTON_INT_PRIORITY);
+//    IntEnable(INT_TIMER0A);
+//
     // GPIO PJ0 and PJ1 = EK-TM4C1294XL buttons 1 and 2
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
     GPIOPinTypeGPIOInput(GPIO_PORTJ_BASE, GPIO_PIN_0 | GPIO_PIN_1);
