@@ -64,7 +64,7 @@ int main(void)
     signal_init();
     // initialize ADCs and Buttons
     ADCInit();
-    ButtonInit();
+    //ButtonInit();
 
     /* Start BIOS */
     BIOS_start();
@@ -113,6 +113,7 @@ void display_task(UArg arg1, UArg arg2) // low priority
 {
     int x, y,nxt_x,nxt_y;
 
+
     Crystalfontz128x128_Init(); // Initialize the LCD display driver
     Crystalfontz128x128_SetOrientation(LCD_ORIENTATION_UP); // set screen orientation
 
@@ -120,9 +121,14 @@ void display_task(UArg arg1, UArg arg2) // low priority
     GrContextInit(&sContext, &g_sCrystalfontz128x128); // Initialize the grlib graphics context
     GrContextFontSet(&sContext, &g_sFontFixed6x8); // select font
 
+    tRectangle rectFullScreen = {0, 0, GrContextDpyWidthGet(&sContext)-1, GrContextDpyHeightGet(&sContext)-1};
+
     while(true) {
         Semaphore_pend(screenupdate, BIOS_WAIT_FOREVER); // pending on trigger from processing task
         task3cnt ++; // debug
+
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &rectFullScreen); // fill screen with black
 
         // draw grid
         GrContextForegroundSet(&sContext, ClrDarkBlue);

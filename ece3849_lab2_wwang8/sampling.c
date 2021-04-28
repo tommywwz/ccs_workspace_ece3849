@@ -13,7 +13,6 @@
 #include "driverlib/sysctl.h"
 #include "driverlib/gpio.h"
 #include "driverlib/timer.h"
-#include "driverlib/interrupt.h"
 #include "driverlib/adc.h"
 #include "sysctl_pll.h"
 #include "sampling.h"
@@ -45,11 +44,10 @@ void ADCInit(void) {
                                                                                          // enable interrupt, and make it the end of sequence
     ADCSequenceEnable(ADC0_BASE, 0); // enable the sequence. it is now sampling
     ADCSequenceEnable(ADC1_BASE, 0);
-//    ADCIntEnable(ADC1_BASE, 0); // enable sequence 0 interrupt in the ADC1 peripheral
+    ADCIntEnable(ADC1_BASE, 0); // enable sequence 0 interrupt in the ADC1 peripheral
 //    IntPrioritySet(INT_ADC1SS0, 0); // set ADC1 sequence 0 interrupt priority
 //    IntEnable(INT_ADC1SS0); // enable ADC1 sequence 0 interrupt in int. controller
 }
-
 
 
 void ADC_ISR(void) {
