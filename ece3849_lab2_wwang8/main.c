@@ -31,15 +31,24 @@
 #define PWM_FREQUENCY 20000  // PWM frequency = 20 kHz
 #define ADC_OFFSET 2048         // ADC value when oscope reading = 0V
 #define GRID_SPACING 20     // space for gird drawing
+#define VIN_RANGE 3.3f       // range of ADC
+#define PIXELS_PER_DIV 20    // LCD pixels per voltage division
+#define ADC_BITS 12          // number of bits in the ADC sample
 
 uint32_t gSystemClock = 120000000; // [Hz] system clock frequency
 uint16_t WaveBuffer [LCD_HORIZONTAL_MAX];
 uint16_t processedBuffer [LCD_HORIZONTAL_MAX];
+float fScale;
 
 void signal_init(void);
 int RisingTrigger(void);
 int FallingTrigger(void);
 void loadBuffer(uint16_t* locBuffer, int trigger);
+
+//debug
+uint32_t task1cnt = 0;
+uint32_t task2cnt = 0;
+uint32_t task3cnt = 0;
 
 /*
  *  ======== main ========
@@ -48,21 +57,11 @@ int main(void)
 {
     IntMasterDisable();
 
-    Crystalfontz128x128_Init(); // Initialize the LCD display driver
-    Crystalfontz128x128_SetOrientation(LCD_ORIENTATION_UP); // set screen orientation
-
-    tContext sContext;
-    GrContextInit(&sContext, &g_sCrystalfontz128x128); // Initialize the grlib graphics context
-    GrContextFontSet(&sContext, &g_sFontFixed6x8); // select font
-
     // initialize PWM
     signal_init();
-
     // initialize ADCs and Buttons
     ADCInit();
     ButtonInit();
-
-    // hardware initialization goes here
 
     /* Start BIOS */
     BIOS_start();
@@ -70,40 +69,58 @@ int main(void)
     return (0);
 }
 
-void waveform_task(UArg arg1, UArg arg2)
+void waveform_task(UArg arg1, UArg arg2) // highest priority
 {
     IntMasterEnable();
     int trigger;
+    const float fVoltsPerDiv = 2.0f;
 
     while (true) {
         Semaphore_pend(sema0, BIOS_WAIT_FOREVER);
+        task1cnt ++;
+
         trigger = RisingTrigger();
+        fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv);
         loadBuffer(WaveBuffer, trigger);
 
         Semaphore_post(sema1); // trigger processing_task
     }
 }
 
-void processing_task(UArg arg1, UArg arg2)
+void processing_task(UArg arg1, UArg arg2) // lowest priority
 {
     uint32_t i;
     while (true) {
         Semaphore_pend(sema1, BIOS_WAIT_FOREVER); // pending on trigger from waveform task
-        i = 0;
-        while (i < LCD_HORIZONTAL_MAX)
-            processedBuffer[i] = WaveBuffer[i];
+        task2cnt ++;
 
-        Semaphore_post(sema2); // trigger display task
+        i = 0;
+        while (i < LCD_HORIZONTAL_MAX) {
+            processedBuffer[i] = WaveBuffer[i];
+            i ++;
+        }
+
+        Semaphore_post(screenupdate); // trigger display task
         Semaphore_post(sema0); // trigger waveform task
     }
 }
 
-void display_task(UArg arg1, UArg arg2)
+void display_task(UArg arg1, UArg arg2) // low priority
 {
     int x, y,nxt_x,nxt_y;
-    float fScale;
+
+    Crystalfontz128x128_Init(); // Initialize the LCD display driver
+    Crystalfontz128x128_SetOrientation(LCD_ORIENTATION_UP); // set screen orientation
+
     tContext sContext;
+    GrContextInit(&sContext, &g_sCrystalfontz128x128); // Initialize the grlib graphics context
+    GrContextFontSet(&sContext, &g_sFontFixed6x8); // select font
+
     while(true) {
+        Semaphore_pend(screenupdate, BIOS_WAIT_FOREVER); // pending on trigger from processing task
+
+        task3cnt ++;
+
         // draw grid
         GrContextForegroundSet(&sContext, ClrDarkBlue);
         uint16_t gridoffset = 0;
@@ -115,7 +132,6 @@ void display_task(UArg arg1, UArg arg2)
             gridoffset++;
         }
 
-        Semaphore_pend(sema2, BIOS_WAIT_FOREVER); // pending on trigger from processing task
         // draw wave
         x = 0;
         GrContextForegroundSet(&sContext, ClrYellow); // yellow text
@@ -127,8 +143,10 @@ void display_task(UArg arg1, UArg arg2)
             x++;
         }
 
+        GrFlush(&sContext); // flush the frame buffer to the LCD
     }
 }
+
 
 int RisingTrigger(void) // search for rising edge trigger
 {
@@ -148,23 +166,23 @@ int RisingTrigger(void) // search for rising edge trigger
     return x;
 }
 
-int FallingTrigger(void) // search for falling edge trigger
-{
-    // Step 1
-    int32_t locBufferIndex = gADCBufferIndex;
-    int x = locBufferIndex - LCD_HORIZONTAL_MAX/2/* half screen width; don’t use a magic number */;
-    // Step 2
-    int x_stop = x - ADC_BUFFER_SIZE/2;
-    for (; x > x_stop; x--) {
-        if (gADCBuffer[ADC_BUFFER_WRAP(x)] <= ADC_OFFSET &&
-                gADCBuffer[ADC_BUFFER_WRAP(x-1)]/* next older sample */ > ADC_OFFSET)
-            break;
-    }
-    // Step 3
-    if (x == x_stop) // for loop ran to the end
-        x = gADCBufferIndex - LCD_HORIZONTAL_MAX/2; // reset x back to how it was initialized
-    return x;
-}
+//int FallingTrigger(void) // search for falling edge trigger
+//{
+//    // Step 1
+//    int32_t locBufferIndex = gADCBufferIndex;
+//    int x = locBufferIndex - LCD_HORIZONTAL_MAX/2/* half screen width; don’t use a magic number */;
+//    // Step 2
+//    int x_stop = x - ADC_BUFFER_SIZE/2;
+//    for (; x > x_stop; x--) {
+//        if (gADCBuffer[ADC_BUFFER_WRAP(x)] <= ADC_OFFSET &&
+//                gADCBuffer[ADC_BUFFER_WRAP(x-1)]/* next older sample */ > ADC_OFFSET)
+//            break;
+//    }
+//    // Step 3
+//    if (x == x_stop) // for loop ran to the end
+//        x = gADCBufferIndex - LCD_HORIZONTAL_MAX/2; // reset x back to how it was initialized
+//    return x;
+//}
 
 void loadBuffer(uint16_t* locBuffer, int trigger) {
     // Step 4
