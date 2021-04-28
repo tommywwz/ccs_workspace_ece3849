@@ -22,7 +22,7 @@ volatile int32_t gADCBufferIndex = ADC_BUFFER_SIZE - 1; // latest sample index
 volatile uint16_t gADCBuffer[ADC_BUFFER_SIZE]; // circular buffer
 volatile uint32_t gADCErrors = 0; // number of missed ADC deadlines
 
-uint32_t adc_cnt=0; //debug
+uint32_t adc_cnt = 0;
 
 void ADCInit(void) {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
@@ -49,6 +49,8 @@ void ADCInit(void) {
 //    IntPrioritySet(INT_ADC1SS0, 0); // set ADC1 sequence 0 interrupt priority
 //    IntEnable(INT_ADC1SS0); // enable ADC1 sequence 0 interrupt in int. controller
 }
+
+
 
 void ADC_ISR(void) {
     adc_cnt ++;

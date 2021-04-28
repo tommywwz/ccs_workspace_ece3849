@@ -22,5 +22,7 @@ extern volatile uint32_t gADCErrors; // number of missed ADC deadlines
 
 void ADCInit(void);
 
+void ADC_ISR(void);
+
 
 #endif /* SAMPLING_H_ */
