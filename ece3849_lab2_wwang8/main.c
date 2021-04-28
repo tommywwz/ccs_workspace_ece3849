@@ -116,9 +116,6 @@ void processing_task(UArg arg1, UArg arg2) // lowest priority
 void display_task(UArg arg1, UArg arg2) // low priority
 {
     int x, y,nxt_x,nxt_y;
-    char button = 0;
-    char button_old, pressed;
-    bool trigger_mod = 1;
 
     Crystalfontz128x128_Init(); // Initialize the LCD display driver
     Crystalfontz128x128_SetOrientation(LCD_ORIENTATION_UP); // set screen orientation
@@ -130,14 +127,7 @@ void display_task(UArg arg1, UArg arg2) // low priority
     while(true) {
         Semaphore_pend(screenupdate, BIOS_WAIT_FOREVER); // pending on trigger from processing task
         task3cnt ++; // debug
-        button_old = button;
 
-        Mailbox_pend(button_mailbox, &button, BIOS_WAIT_FOREVER);
-
-        pressed = ~button & button_old; // detect the button from pressed to non pressed
-
-        if (pressed & 1)
-            trigger_mod = !trigger_mod; // if sw 1 pressed, flip the trigger mode
 
         // draw grid
         GrContextForegroundSet(&sContext, ClrDarkBlue);
@@ -187,6 +177,7 @@ void button_clock(void) // clock function
 {
     clkcnt++;
     Semaphore_post(sample_btn);
+
 }
 
 
@@ -211,6 +202,25 @@ void button_task(UArg arg1, UArg arg2) // high priority
         loc_button = (char)gButtons;
         Mailbox_post(button_mailbox, &loc_button, BIOS_WAIT_FOREVER);
     }
+}
+
+void usrinput_task(UArg arg1, UArg arg2) // medium priority
+{
+    char button = 0;
+    char button_old, pressed;
+    bool trigger_mod = 1;
+
+    while(true) {
+        Mailbox_pend(button_mailbox, &button, BIOS_WAIT_FOREVER);
+
+        button_old = button;
+
+        pressed = ~button & button_old; // detect the button from pressed to non pressed
+
+        if (pressed & 1)
+            trigger_mod = !trigger_mod; // if sw 1 pressed, flip the trigger mode
+    }
+
 }
 
 
