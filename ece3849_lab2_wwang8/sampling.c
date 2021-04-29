@@ -21,8 +21,6 @@ volatile int32_t gADCBufferIndex = ADC_BUFFER_SIZE - 1; // latest sample index
 volatile uint16_t gADCBuffer[ADC_BUFFER_SIZE]; // circular buffer
 volatile uint32_t gADCErrors = 0; // number of missed ADC deadlines
 
-uint32_t adc_cnt = 0;
-
 void ADCInit(void) {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
     GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_0); // GPIO setup for analog input AIN3
@@ -51,7 +49,6 @@ void ADCInit(void) {
 
 
 void ADC_ISR(void) {
-    adc_cnt ++;
 
     ADC1_ISC_R = ADC_ISC_IN0; // clear ADC1 sequence0 interrupt flag in the ADCISC register
     if (ADC1_OSTAT_R & ADC_OSTAT_OV0) { // check for ADC FIFO overflow
