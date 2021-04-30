@@ -47,8 +47,8 @@
 uint32_t gSystemClock = 120000000; // [Hz] system clock frequency
 uint16_t WaveBuffer [NFFT];
 uint16_t processedBuffer [NFFT];
-volatile bool trigger_mode = 1;
-volatile bool spectrum_mode = 0;
+volatile bool trigger_mode = 1;    // trigger mode, 1: trigger at up, 0: trigger at down
+volatile bool spectrum_mode = 0;   // spectrum mode, 1: enable spectrum mode, 0: disable spectrum mode
 
 void signal_init(void);
 int FindTrigger(bool trig_mode);
