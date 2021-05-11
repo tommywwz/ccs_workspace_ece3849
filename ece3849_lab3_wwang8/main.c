@@ -54,6 +54,8 @@ void signal_init(void);
 int FindTrigger(bool trig_mode);
 void loadBuffer(uint16_t* locBuffer, int trigger);
 void loadFFTBuffer(uint16_t* fftBuffer, int trigger);
+int32_t cpu_unload_count(void);
+int32_t cpu_load_count(void);
 
 
 ////debug
@@ -362,6 +364,25 @@ void loadFFTBuffer(uint16_t* fftBuffer, int trigger) {
         *(fftBuffer + i) = gADCBuffer[ADC_BUFFER_WRAP(trigger + i)];
         i++;
     }
+}
+
+
+int32_t cpu_unload_count(void) {
+    int32_t CPU_unload = 0;
+    TimerEnable(TIMER3_BASE, TIMER_A);
+    while (TIMER3_CTL_R & TIMER_CTL_TAEN) {
+        CPU_unload++; // iterate if time is not up
+    }
+    return CPU_unload;
+}
+
+int32_t cpu_load_count(void) {
+    int32_t CPU_load = 0;
+    TimerEnable(TIMER3_BASE, TIMER_A);
+    while (TIMER3_CTL_R & TIMER_CTL_TAEN) {
+        CPU_load++; // iterate if time is not up
+    }
+    return CPU_load;
 }
 
 
