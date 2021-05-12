@@ -21,8 +21,8 @@
 #include <stdio.h>
 #include "inc/hw_memmap.h"
 #include "driverlib/interrupt.h"
-#include "driverlib/gpio.h"
 #include "driverlib/pwm.h"
+#include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 #include "driverlib/sysctl.h"
 #include "driverlib/timer.h"
@@ -44,25 +44,34 @@
 #define NFFT 1024   //FFT length
 #define KISS_FFT_CFG_SIZE (sizeof(struct kiss_fft_state) + sizeof(kiss_fft_cpx)*(NFFT-1))
 
-uint32_t gSystemClock = 120000000; // [Hz] system clock frequency
+#define CPU_LOAD_CHECK_FREQ 100000 // Hz
+
+const uint32_t gSystemClock = 120000000; // [Hz] system clock frequency
 uint16_t WaveBuffer [NFFT];
 uint16_t processedBuffer [NFFT];
 volatile bool trigger_mode = 1;    // trigger mode, 1: trigger at up, 0: trigger at down
 volatile bool spectrum_mode = 0;   // spectrum mode, 1: enable spectrum mode, 0: disable spectrum mode
 
-void signal_init(void);
+int32_t unload_count; // the iteration count when interrupt disabled
+int32_t load_count; // the iteration count when interrupt enabled
+float cpu_load;     // cpu load to display
+float MAX_cpu_load = 0.0f;  // the maximum cpu laod for debugging
+
+volatile uint32_t period = 0;  // period of two clock captures
+uint32_t pwm_period = 6000;    // period of pwm generator
+
 int FindTrigger(bool trig_mode);
 void loadBuffer(uint16_t* locBuffer, int trigger);
 void loadFFTBuffer(uint16_t* fftBuffer, int trigger);
-int32_t cpu_unload_count(void);
 int32_t cpu_load_count(void);
+void signal_init(void);
+void freq_counter_init (void);
 
-
-////debug
-//uint32_t task1cnt = 0;
-//uint32_t task2cnt = 0;
-//uint32_t task3cnt = 0;
-//uint32_t clkcnt = 0;
+//debug
+uint32_t task1cnt = 0;
+uint32_t task2cnt = 0;
+uint32_t task3cnt = 0;
+uint32_t clkcnt = 0;
 
 /*
  *  ======== main ========
@@ -71,8 +80,18 @@ int main(void)
 {
     IntMasterDisable();
 
+    // initializing clock for counting CPU load
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER3);
+    TimerDisable(TIMER3_BASE, TIMER_BOTH);
+    TimerConfigure(TIMER3_BASE, TIMER_CFG_ONE_SHOT);
+    TimerLoadSet(TIMER3_BASE, TIMER_A, CPU_LOAD_CHECK_FREQ - 1);
+
+    unload_count = cpu_load_count(); // get CPU load when INT isn't enabled
+
     // initialize PWM
     signal_init();
+    // initialize frequency counter timer
+    freq_counter_init();
     // initialize ADCs and Buttons
     ADCInit();
     ButtonInit();
@@ -89,10 +108,15 @@ void waveform_task(UArg arg1, UArg arg2) // highest priority
 
     while (true) {
         Semaphore_pend(sema0, BIOS_WAIT_FOREVER);
-//        task1cnt ++; //debug
+        task1cnt ++; //debug
 
         if (spectrum_mode) {
+#ifdef SINGLE_SAMPLE_ISR
             int32_t FFTBufferIndex = gADCBufferIndex;
+#endif
+#if defined DMA_ONE_MSPS || DMA_TWO_MSPS
+            int32_t FFTBufferIndex = getADCBufferIndex();
+#endif
             FFTBufferIndex = FFTBufferIndex - NFFT + 1; // offset the index for FFT buffer start point
             loadFFTBuffer(WaveBuffer, FFTBufferIndex);
 
@@ -125,7 +149,7 @@ void processing_task(UArg arg1, UArg arg2) // lowest priority
 
     while (true) {
         Semaphore_pend(sema1, BIOS_WAIT_FOREVER); // pending on trigger from waveform task
-//        task2cnt ++; //debug
+        task2cnt ++; //debug
 
         if (spectrum_mode) {
             for (i = 0; i < NFFT; i++) { // generate an input waveform
@@ -162,7 +186,11 @@ void display_task(UArg arg1, UArg arg2) // low priority
     char VoltageScaleStr [10];   // string for displaying voltage scale
     char str_FFTfreq [10];        // string for displaying time scale
     char str_FFTdB [10];   // string for displaying voltage scale
+    char str_cpu_load [30];  // string for display CPU load
+    char str_frequency [20], str_set_period [20];  // string for displaying frequency and period
     float fScale = (VIN_RANGE * PIXELS_PER_DIV)/((1 << ADC_BITS) * fVoltsPerDiv);
+    float period_in_sec = 0.0f;
+    uint32_t locPeriod = 0, locSetPeriod = 0;
 
     Crystalfontz128x128_Init(); // Initialize the LCD display driver
     Crystalfontz128x128_SetOrientation(LCD_ORIENTATION_UP); // set screen orientation
@@ -175,7 +203,7 @@ void display_task(UArg arg1, UArg arg2) // low priority
 
     while(true) {
         Semaphore_pend(screenupdate, BIOS_WAIT_FOREVER); // pending on trigger from processing task
-//        task3cnt ++; // debug
+        task3cnt ++; // debug
 
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &rectFullScreen); // fill screen with black
@@ -208,8 +236,6 @@ void display_task(UArg arg1, UArg arg2) // low priority
             GrStringDraw(&sContext, str_FFTfreq, /*length*/ -1, /*x*/ 0, /*y*/ 0, /*opaque*/ false);
             snprintf(str_FFTdB, sizeof(str_FFTdB), "%u dB", 20);
             GrStringDraw(&sContext, str_FFTdB, /*length*/ -1, /*x*/ LCD_HORIZONTAL_MAX/2 - sizeof(str_FFTdB), /*y*/ 0, /*opaque*/ false);
-
-            GrFlush(&sContext); // flush the frame buffer to the LCD
         } else {
             // draw grid
             GrContextForegroundSet(&sContext, ClrDarkBlue);
@@ -259,15 +285,33 @@ void display_task(UArg arg1, UArg arg2) // low priority
                 GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-17, 2, LCD_HORIZONTAL_MAX-15, 4);
                 GrLineDraw (&sContext, LCD_HORIZONTAL_MAX-13, 2, LCD_HORIZONTAL_MAX-15, 4);
             }
-
-            GrFlush(&sContext); // flush the frame buffer to the LCD
         }
+
+        locPeriod = period;
+        period_in_sec = (float)locPeriod * 1/gSystemClock;
+        // display frequency and set period
+        snprintf(str_frequency, sizeof(str_frequency), "f = %d Hz", (int32_t)(1 / period_in_sec));
+        GrStringDraw(&sContext, str_frequency, /*length*/ -1, /*x*/ 0, /*y*/ LCD_VERTICAL_MAX - 16, /*opaque*/ false);
+
+        locSetPeriod = pwm_period;
+        snprintf(str_set_period, sizeof(str_set_period), "T = %d", locSetPeriod);
+        GrStringDraw(&sContext, str_set_period, /*length*/ -1, /*x*/ 0, /*y*/ LCD_VERTICAL_MAX - 24, /*opaque*/ false);
+
+        // display CPU laod
+        load_count = cpu_load_count();
+        cpu_load = 1.0f - (float)load_count/unload_count;
+        if (cpu_load > MAX_cpu_load) MAX_cpu_load = cpu_load;
+        snprintf(str_cpu_load, sizeof(str_cpu_load), "CPU load = %.1f%%", cpu_load*100);
+        GrStringDraw(&sContext, str_cpu_load, /*length*/ -1, /*x*/ 0, /*y*/ LCD_VERTICAL_MAX - 8, /*opaque*/ false);
+
+        // flush the frame buffer to the LCD
+        GrFlush(&sContext);
     }
 }
 
 void button_clock(void) // clock function
 {
-//    clkcnt++; //debug
+    clkcnt++; //debug
     Semaphore_post(sample_btn);
 }
 
@@ -278,7 +322,7 @@ void button_task(UArg arg1, UArg arg2) // high priority
     while(true) {
         Semaphore_pend(sample_btn, BIOS_WAIT_FOREVER);
 
-        TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
+        TimerIntClear(TIMER1_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
         // read hardware button state
         uint32_t gpio_buttons = ~GPIOPinRead(GPIO_PORTJ_BASE, 0xff) & (GPIO_PIN_1 | GPIO_PIN_0); // EK-TM4C1294XL buttons in positions 0 and 1
         gpio_buttons = gpio_buttons | ((~GPIOPinRead(GPIO_PORTH_BASE, 0xff) & GPIO_PIN_1) << 1); // load S1 to bitmap
@@ -308,20 +352,48 @@ void userinput_task (UArg arg1, UArg arg2) // medium priority
         pressed = ~button & button_old; // detect the button from pressed to non pressed
 
         if (pressed & 1)
-            trigger_mode = !trigger_mode; // if sw 1 pressed, flip the trigger mode
+            trigger_mode = !trigger_mode; // if usr sw 1 pressed, flip the trigger mode
 
         if (pressed & 2) {
-            spectrum_mode = !spectrum_mode; // if sw 2 pressed, change display mode
+            spectrum_mode = !spectrum_mode; // if usr sw 2 pressed, change display mode
+        }
+
+        if (pressed & 4) {
+            pwm_period += 500; // if sw 1 pressed, increment period
+            PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, pwm_period);
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, pwm_period*0.4f);
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, pwm_period*0.4f);
+        }
+
+        if (pressed & 8) {
+            pwm_period -= 500; // if sw 1 pressed, decrement period
+            PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, pwm_period);
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, pwm_period*0.4f);
+            PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, pwm_period*0.4f);
         }
     }
+}
 
+void FreqCount(void) {
+    static uint32_t last_count = 0;
+    TimerIntClear(TIMER0_BASE, TIMER_CAPA_EVENT); // clear capture flag
+    uint32_t count = TimerValueGet(TIMER0_BASE, TIMER_A);
+    period = ((count - last_count) & 0xffffff);
+    last_count = count;
 }
 
 
 int FindTrigger (bool trig_mode) // search for rising edge trigger
 {
     // Step 1
+#ifdef SINGLE_SAMPLE_ISR
     int32_t locBufferIndex = gADCBufferIndex;
+#endif
+
+#if defined DMA_ONE_MSPS || DMA_TWO_MSPS
+    int32_t locBufferIndex = getADCBufferIndex();
+#endif
+
     int x = locBufferIndex - LCD_HORIZONTAL_MAX/2/* half screen width; don’t use a magic number */;
     // Step 2
     int x_stop = x - ADC_BUFFER_SIZE/2;
@@ -341,8 +413,15 @@ int FindTrigger (bool trig_mode) // search for rising edge trigger
     }
 
     // Step 3
-    if (x == x_stop) // for loop ran to the end
+    if (x == x_stop) { // for loop ran to the end
+#ifdef SINGLE_SAMPLE_ISR
         x = gADCBufferIndex - LCD_HORIZONTAL_MAX/2; // reset x back to how it was initialized
+#endif
+
+#if defined DMA_ONE_MSPS || DMA_TWO_MSPS
+        x = getADCBufferIndex() - LCD_HORIZONTAL_MAX/2;
+#endif
+    }
     return x;
 }
 
@@ -367,22 +446,13 @@ void loadFFTBuffer(uint16_t* fftBuffer, int trigger) {
 }
 
 
-int32_t cpu_unload_count(void) {
-    int32_t CPU_unload = 0;
-    TimerEnable(TIMER3_BASE, TIMER_A);
-    while (TIMER3_CTL_R & TIMER_CTL_TAEN) {
-        CPU_unload++; // iterate if time is not up
-    }
-    return CPU_unload;
-}
-
 int32_t cpu_load_count(void) {
-    int32_t CPU_load = 0;
-    TimerEnable(TIMER3_BASE, TIMER_A);
-    while (TIMER3_CTL_R & TIMER_CTL_TAEN) {
-        CPU_load++; // iterate if time is not up
-    }
-    return CPU_load;
+    uint32_t i = 0;
+    TimerIntClear(TIMER3_BASE, TIMER_TIMA_TIMEOUT);
+    TimerEnable(TIMER3_BASE, TIMER_A); // start one-shot timer
+    while (!(TimerIntStatus(TIMER3_BASE, false) & TIMER_TIMA_TIMEOUT))
+        i++;
+    return i;
 }
 
 
@@ -404,4 +474,19 @@ void signal_init(void) {
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, roundf((float)gSystemClock/PWM_FREQUENCY*0.4f));
     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT | PWM_OUT_3_BIT, true);
     PWMGenEnable(PWM0_BASE, PWM_GEN_1);
+}
+
+void freq_counter_init (void) {
+    // configure GPIO PD0 as timer input T0CCP0 at BoosterPack Connector #1 pin 14
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    GPIOPinTypeTimer(GPIO_PORTD_BASE, GPIO_PIN_0);
+    GPIOPinConfigure(GPIO_PD0_T0CCP0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+    TimerDisable(TIMER0_BASE, TIMER_BOTH);
+    TimerConfigure(TIMER0_BASE, TIMER_CFG_SPLIT_PAIR | TIMER_CFG_A_CAP_TIME_UP);
+    TimerControlEvent(TIMER0_BASE, TIMER_A, TIMER_EVENT_POS_EDGE);
+    TimerLoadSet(TIMER0_BASE, TIMER_A, 0xffff); // use maximum load value
+    TimerPrescaleSet(TIMER0_BASE, TIMER_A, 0xff); // use maximum prescale value
+    TimerIntEnable(TIMER0_BASE, TIMER_CAPA_EVENT);
+    TimerEnable(TIMER0_BASE, TIMER_A);
 }

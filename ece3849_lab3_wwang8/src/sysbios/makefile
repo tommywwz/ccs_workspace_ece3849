@@ -16,7 +16,7 @@ BIOS_INC  = -I"C:/ti/tirtos_tivac_2_16_01_14/products/bios_6_45_02_31/packages/"
 
 TARGET_INC = -I"C:/ti/tirtos_tivac_2_16_01_14/products/bios_6_45_02_31/packages/"
 
-INCS = $(BIOS_INC) $(TARGET_INC)  --include_path="C:/ccs_workspace/ece3849_lab2_wwang8" --include_path="C:/ccs_workspace/ece3849_lab2_wwang8" --include_path="C:/ti/tirtos_tivac_2_16_01_14/products/TivaWare_C_Series-2.1.1.71b" --include_path="C:/ti/ccs930/ccs/tools/compiler/ti-cgt-arm_18.12.4.LTS/include" 
+INCS = $(BIOS_INC) $(TARGET_INC)  --include_path="C:/ccs_workspace/ece3849_lab3_wwang8" --include_path="C:/ccs_workspace/ece3849_lab3_wwang8" --include_path="C:/ti/tirtos_tivac_2_16_01_14/products/TivaWare_C_Series-2.1.1.71b" --include_path="C:/ti/ccs930/ccs/tools/compiler/ti-cgt-arm_18.12.4.LTS/include" 
 
 CC = C:/ti/ccs930/ccs/tools/compiler/ti-cgt-arm_18.12.4.LTS/bin/armcl -c $(CCOPTS) -I C:/ti/ccs930/ccs/tools/compiler/ti-cgt-arm_18.12.4.LTS/include
 ASM = C:/ti/ccs930/ccs/tools/compiler/ti-cgt-arm_18.12.4.LTS/bin/armcl -c $(CCOPTS) -I C:/ti/ccs930/ccs/tools/compiler/ti-cgt-arm_18.12.4.LTS/include
