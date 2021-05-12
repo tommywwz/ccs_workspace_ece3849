@@ -31,8 +31,11 @@
 
 #include "buttons.h"
 #include "sampling.h"
+#include "audio_waveform.h"
 
 #define PWM_FREQUENCY 20000  // PWM frequency = 20 kHz
+#define PWM0GEN2_PERIOD 258    // period of PWM0 GEN2 is 258 system clk
+
 #define ADC_OFFSET 2048         // ADC value when oscope reading = 0V
 #define GRID_SPACING 20     // space for gird drawing
 #define VIN_RANGE 3.3f       // range of ADC
@@ -44,7 +47,8 @@
 #define NFFT 1024   //FFT length
 #define KISS_FFT_CFG_SIZE (sizeof(struct kiss_fft_state) + sizeof(kiss_fft_cpx)*(NFFT-1))
 
-#define CPU_LOAD_CHECK_FREQ 100000 // Hz
+#define CPU_LOAD_CHECK_FREQ 1200000 // Hz
+#define CPU_LOAD_INTERVAL 100
 
 const uint32_t gSystemClock = 120000000; // [Hz] system clock frequency
 uint16_t WaveBuffer [NFFT];
@@ -59,6 +63,9 @@ float MAX_cpu_load = 0.0f;  // the maximum cpu laod for debugging
 
 volatile uint32_t period = 0;  // period of two clock captures
 uint32_t pwm_period = 6000;    // period of pwm generator
+
+uint32_t gPWMSample = 0; // PWM sample counter
+uint32_t gSamplingRateDivider = 30; // sampling rate divider
 
 int FindTrigger(bool trig_mode);
 void loadBuffer(uint16_t* locBuffer, int trigger);
@@ -311,6 +318,7 @@ void display_task(UArg arg1, UArg arg2) // low priority
 
 void button_clock(void) // clock function
 {
+    TimerIntClear(TIMER1_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
     clkcnt++; //debug
     Semaphore_post(sample_btn);
 }
@@ -322,7 +330,6 @@ void button_task(UArg arg1, UArg arg2) // high priority
     while(true) {
         Semaphore_pend(sample_btn, BIOS_WAIT_FOREVER);
 
-        TimerIntClear(TIMER1_BASE, TIMER_TIMA_TIMEOUT); // clear interrupt flag
         // read hardware button state
         uint32_t gpio_buttons = ~GPIOPinRead(GPIO_PORTJ_BASE, 0xff) & (GPIO_PIN_1 | GPIO_PIN_0); // EK-TM4C1294XL buttons in positions 0 and 1
         gpio_buttons = gpio_buttons | ((~GPIOPinRead(GPIO_PORTH_BASE, 0xff) & GPIO_PIN_1) << 1); // load S1 to bitmap
@@ -370,6 +377,10 @@ void userinput_task (UArg arg1, UArg arg2) // medium priority
             PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, pwm_period);
             PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, pwm_period*0.4f);
             PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, pwm_period*0.4f);
+        }
+
+        if (pressed & 0x10) {
+            PWMIntEnable(PWM0_BASE, PWM_INT_GEN_2);
         }
     }
 }
@@ -474,6 +485,24 @@ void signal_init(void) {
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, roundf((float)gSystemClock/PWM_FREQUENCY*0.4f));
     PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT | PWM_OUT_3_BIT, true);
     PWMGenEnable(PWM0_BASE, PWM_GEN_1);
+
+    // configure M0PWM5 at GPIO PG1
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
+    GPIOPinTypePWM(GPIO_PORTG_BASE, GPIO_PIN_1);
+    GPIOPinConfigure(GPIO_PG1_M0PWM5);
+    GPIOPadConfigSet(GPIO_PORTG_BASE, GPIO_PIN_1,
+                     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD);
+
+    // configure the PWM0 peripheral, gen 2, outputs 5
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
+    PWMClockSet(PWM0_BASE, PWM_SYSCLK_DIV_1); // use system clock without division
+    PWMGenConfigure(PWM0_BASE, PWM_GEN_2, PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_2, PWM0GEN2_PERIOD);
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_5, roundf((float)PWM0GEN2_PERIOD*0.5f));
+    PWMOutputState(PWM0_BASE, PWM_OUT_5_BIT, true);
+    PWMGenEnable(PWM0_BASE, PWM_GEN_2);
+
+    PWMGenIntTrigEnable(PWM0_BASE, PWM_GEN_2, PWM_INT_CNT_ZERO);
 }
 
 void freq_counter_init (void) {
@@ -489,4 +518,16 @@ void freq_counter_init (void) {
     TimerPrescaleSet(TIMER0_BASE, TIMER_A, 0xff); // use maximum prescale value
     TimerIntEnable(TIMER0_BASE, TIMER_CAPA_EVENT);
     TimerEnable(TIMER0_BASE, TIMER_A);
+}
+
+
+void PWM_ISR(void)
+{
+    PWMGenIntClear(PWM0_BASE, PWM_GEN_2, PWM_INT_CNT_ZERO); // clear PWM interrupt flag
+    int i = (gPWMSample++) / gSamplingRateDivider; // waveform sample index
+    PWM0_2_CMPB_R = 1 + gWaveform[i]; // write directly to the PWM compare B register
+    if (i >= gWaveformSize) { // if at the end of the waveform array
+        PWMIntDisable(PWM0_BASE, PWM_INT_GEN_2); // disable these interrupts
+        gPWMSample = 0; // reset sample index so the waveform starts from the beginning
+    }
 }
