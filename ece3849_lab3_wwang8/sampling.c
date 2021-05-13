@@ -19,6 +19,14 @@
 #include "driverlib/udma.h"
 #include <xdc/cfg/global.h> //needed for gate object
 
+#if defined SINGLE_SAMPLE_ISR || DMA_ONE_MSPS
+#define ADC_SAMPLING_RATE 1000000   // [samples/sec] desired ADC sampling rate
+#endif
+
+#ifdef DMA_TWO_MSPS
+#define ADC_SAMPLING_RATE 2000000   // [samples/sec] desired ADC sampling rate
+#endif
+
 volatile int32_t gADCBufferIndex = ADC_BUFFER_SIZE - 1; // latest sample index
 volatile uint16_t gADCBuffer[ADC_BUFFER_SIZE]; // circular buffer
 volatile uint32_t gADCErrors = 0; // number of missed ADC deadlines
@@ -43,31 +51,33 @@ void ADCInit(void) {
     ADCSequenceDisable(ADC1_BASE, 0); // choose ADC1 sequence 0; disable before configuring
     ADCSequenceConfigure(ADC0_BASE, 0, ADC_TRIGGER_PROCESSOR, 0); // specify the "Always" trigger
     ADCSequenceConfigure(ADC1_BASE, 0, ADC_TRIGGER_ALWAYS, 0);
-#ifdef SINGLE_SAMPLE_ISR
+
     ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);   // in the 0th step, sample channel 3 (AIN3)
-#endif
-
-#ifdef DMA_ONE_MSPS     // configure as FIFO, interrupting every 1 usec
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 1, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 2, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 3, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 4, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 5, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 6, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 7, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);
-#endif
-
-#ifdef DMA_TWO_MSPS     // configure as FIFO, interrupting every 2 usec
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_CH3);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 1, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 2, ADC_CTL_CH3);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 3, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 4, ADC_CTL_CH3);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 5, ADC_CTL_CH3 | ADC_CTL_IE);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 6, ADC_CTL_CH3);
-    ADCSequenceStepConfigure(ADC1_BASE, 0, 7, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);
-#endif
+//#ifdef SINGLE_SAMPLE_ISR
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);   // in the 0th step, sample channel 3 (AIN3)
+//#endif
+//
+//#ifdef DMA_ONE_MSPS     // configure as FIFO, interrupting every 1 usec
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 1, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 2, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 3, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 4, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 5, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 6, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 7, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);
+//#endif
+//
+//#ifdef DMA_TWO_MSPS     // configure as FIFO, interrupting every 2 usec
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 0, ADC_CTL_CH3);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 1, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 2, ADC_CTL_CH3);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 3, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 4, ADC_CTL_CH3);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 5, ADC_CTL_CH3 | ADC_CTL_IE);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 6, ADC_CTL_CH3);
+//    ADCSequenceStepConfigure(ADC1_BASE, 0, 7, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);
+//#endif
     ADCSequenceStepConfigure(ADC0_BASE, 0, 0, ADC_CTL_CH13);                             // Joystick HOR(X)
     ADCSequenceStepConfigure(ADC0_BASE, 0, 1, ADC_CTL_CH17 | ADC_CTL_IE | ADC_CTL_END);  // Joystick VER(Y)
                                                                                          // enable interrupt, and make it the end of sequence
